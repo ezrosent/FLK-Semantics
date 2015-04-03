@@ -7,6 +7,6 @@ Languages* by Turbak and Gifford.
 
 ## Approach
 There are definitions of small-step and big-step operational semantics given in
-FLK_sos and FLK_bos respectively. They also include evaluators which carry
+`FLK_sos` and `FLK_bos` respectively. They also include evaluators which carry
 proofs that they conform to the given semantics (though the sos evaluator
 currently has bugs).
