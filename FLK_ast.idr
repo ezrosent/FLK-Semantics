@@ -7,10 +7,12 @@ Ident = String
 
 data OpTy = Arith | Rel | Gen | Bool
 
-data Op1 = Not
+data Op1 = Not | Fst | Snd
 
 instance Show Op1 where
   show Not = "Not"
+  show Fst = "Fst"
+  show Snd = "Snd"
 
 data Op2 : OpTy -> Type where
   Plus   : Op2 Arith
@@ -64,6 +66,7 @@ mutual
     B     : Bool                      -> Exp Done
     Clos  : Env     -> Exp Lam        -> Exp Done
     Id    : Ident                     -> Exp Inter
+    Pair  : Exp a   -> Exp b          -> Exp Done
 
 syntax "((" [exp] [e1] [e2] "))" = "("++exp++" "++(show e1)++" "++(show e2)++")";
 
@@ -78,6 +81,7 @@ instance Show (Exp a) where
   show (B x) = (show x)
   show (Clos x y) = (("Clos" (map fst $ SortedMap.toList x) y))
   show (Id x) = (show x)
+  show (Pair x y) = (("Pair" x y))
 
 
 genOp : Op2 Gen -> Exp Done -> Exp Done -> Exp Done

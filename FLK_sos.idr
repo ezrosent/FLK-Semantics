@@ -19,6 +19,10 @@ mutual
   data Step  : (CF a) -> (CF b) -> Type where
     PNot     :  [Prim1 Not (B b), e => B (not b),  e]
 
+    PFst     :  [Prim1 Fst (Pair e1 e2), e => e1, e]
+
+    PSnd     :  [Prim1 Snd (Pair e1 e2), e => e2, e]
+
     PrimStep :  [b => b']
              -> [Prim1 o b, e => Prim1 o b', e]
 
@@ -193,6 +197,9 @@ mutual
   search_prim2_rhs_7 z exp (Clos x w) y with (opResolve {e=y} z exp (Clos x w))
     search_prim2_rhs_7 z exp (Clos x w) y | Nothing = Nothing
     search_prim2_rhs_7 z exp (Clos x w) y | (Just (exp ** step)) = Just (Done ** (exp >- y ** step))
+  search_prim2_rhs_7 z exp (Pair x w) y with (opResolve {e=y} z exp (Pair x w))
+    search_prim2_rhs_7 z exp (Clos x w) y | Nothing = Nothing
+    search_prim2_rhs_7 z exp (Clos x w) y | (Just (exp ** step)) = Just (Done ** (exp >- y ** step))
 
   search_prim2 : (z : Op2 y)
               -> (w : Exp a)
@@ -210,6 +217,7 @@ mutual
   search_prim2 z (N k) s y = search_prim2_rhs_7 z (N k) s y
   search_prim2 z (B x) s y = search_prim2_rhs_7 z (B x) s y
   search_prim2 z (Clos x w) s y = search_prim2_rhs_7 z (Clos x w) s y
+  search_prim2 z (Pair e1 e2)  s y = search_prim2_rhs_7 z (Pair e1 e2) s y
 
   total
   searchLam : (start : CF Lam)
@@ -234,8 +242,9 @@ mutual
            -> Maybe (Sigma Status (\s1 => Sigma (CF s1) (\o => Step ((If z w s) >- y) o)))
   search_if (Abs x z) w s y  = <[IfCase, (Abs x z), y, \c => If c w s]> --Nothing
   search_if (Rec i b) w s y  = <[IfCase; (Rec i b); y; \c => If c w s]>
-  search_if (N _) _ _ _      = Nothing
-  search_if (Clos _ _) _ _ _ = Nothing
+  search_if (N _) _ _ _        = Nothing
+  search_if (Clos _ _) _ _ _   = Nothing
+  search_if (Pair e1 e2) _ _ _ = Nothing
   search_if (B x) w s y = case x of
                                True  => let t = getTag w in
                                             Just (t ** (w >- y ** IfT))
@@ -251,16 +260,19 @@ mutual
               -> (w : Exp a)
               -> (y : Env)
               -> Maybe (Sigma Status (\s => Sigma (CF s) (\o => Step ((Prim1 z w) >- y) o)))
-  search_prim1 Not (Abs x z)  y = <[PrimStep, (Abs x z), y, (Prim1 Not)]>
-  search_prim1 Not (Rec x z)  y = <[PrimStep; (Rec x z); y; (Prim1 Not)]>
-  search_prim1 Not (N k)      y = Nothing
-  search_prim1 Not (Clos x z) y = Nothing
+  search_prim1 op (Abs x z)  y = <[PrimStep, (Abs x z), y, (Prim1 op)]>
+  search_prim1 op (Rec x z)  y = <[PrimStep; (Rec x z); y; (Prim1 op)]>
+  search_prim1 op (N k)      y = Nothing
+  search_prim1 op (Clos x z) y = Nothing
   search_prim1 Not (B x) y = Just $ (Done ** (B (not x) >- y ** PNot))
-  search_prim1 Not (App x z)     y = [[y; (App x z); Prim1 Not; PrimStep]]
-  search_prim1 Not (If x z w)    y = [[y; (If x z w); Prim1 Not; PrimStep]]
-  search_prim1 Not (Prim1 x z)   y = [[y; (Prim1 x z); Prim1 Not; PrimStep]]
-  search_prim1 Not (Prim2 z w s) y = [[y; (Prim2 z w s); Prim1 Not; PrimStep]]
-  search_prim1 Not (Id x)        y = [[y; (Id x); Prim1 Not; PrimStep]]
+  search_prim1 Fst (Pair fs sn) y = Just $ (getTag fs ** ((fs >- y) ** PFst))
+  search_prim1 Snd (Pair fs sn) y = Just $ (getTag sn ** ((sn >- y) ** PSnd))
+  search_prim1 op (App x z)     y = [[y; (App x z); Prim1 op; PrimStep]]
+  search_prim1 op (If x z w)    y = [[y; (If x z w); Prim1 op; PrimStep]]
+  search_prim1 op (Prim1 x z)   y = [[y; (Prim1 x z); Prim1 op; PrimStep]]
+  search_prim1 op (Prim2 z w s) y = [[y; (Prim2 z w s); Prim1 op; PrimStep]]
+  search_prim1 op (Id x)        y = [[y; (Id x); Prim1 op; PrimStep]]
+  search_prim1 op exp y = Nothing
 
   search_subst_env : (y : Env) -- Outer environment
                   -> (x : Env) -- Closure environment
@@ -284,6 +296,7 @@ mutual
   search_app y (Id x)           w = [[y; (Id x); \s => App s w; AppFunT]]
   search_app y (N k)            w = Nothing
   search_app y (B x)            w = Nothing
+  search_app y (Pair e1 e2)     w = Nothing
   search_app y (Rec x z)        w   = <[AppFunT; (Rec x z); y; (\clos => App clos w)]>
   search_app y (Clos x z) (Rec w s) = <[AppArgT; (Rec w s); y; (\arg => App (Clos x z) arg)]>
   search_app y (Clos x z) (App e b)        = [[y; App e b; App (Clos x z); AppArgT]]

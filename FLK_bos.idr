@@ -15,6 +15,14 @@ mutual
   data BigStep : (CF a) -> (CF b) -> Type where
     DoneEv : {d : Exp Done} -> [d, e =>> d, e]
 
+    FstEv   : [e1 =>> (Pair eFst eSnd)]
+           -> [eFst =>> v1]
+           -> [Prim1 Fst e1, env =>> v1, env']
+
+    SndEv   : [e1 =>> (Pair eFst eSnd)]
+           -> [eSnd =>> v1]
+           -> [Prim1 Snd e1, env =>> v1, env']
+
     Prim1Ev : [e =>> (B b)]
            -> [Prim1 Not e, env =>> B (not b), env]
 
@@ -72,6 +80,8 @@ mutual
     show LamEv = "LamEv"
     show (RecEv x) = (show x) ++ "-> RecEv"
     show (AppEv s x1 y1) = (show s) ++ " and " ++ (show x1) ++ " and " ++ (show y1) ++ " -> " ++ "AppEv"
+    show (FstEv p1 p2) = (show p1) ++ " and " ++ (show p1) ++ " -> " ++ "FstEv"
+    show (SndEv p1 p2) = (show p1) ++ " and " ++ (show p1) ++ " -> " ++ "SndEv"
 
   transStr : (CF a) -> (CF b) -> String
   transStr c d = "["++(show c)++"] =>> ["++(show d)++"]"
@@ -117,6 +127,22 @@ mutual
     ((state >- _) ** trans') <- [[z, y]]
     case state of
          (B b) => pure ((B $ not b) >- y ** (Prim1Ev trans'))
+         otherwise => Nothing
+
+  evalCFI ((Prim1 Fst z) >- y) = do
+    ((state >- _) ** trans) <- [[z, y]]
+    case state of
+         (Pair e1 e2) =>  do
+           ((state' >- y') ** trans') <- [[e1, y]]
+           pure $ ((state' >- y') ** FstEv trans trans')
+         otherwise => Nothing
+
+  evalCFI ((Prim1 Snd z) >- y) = do
+    ((state >- _) ** trans) <- [[z, y]]
+    case state of
+         (Pair e1 e2) =>  do
+           ((state' >- y') ** trans') <- [[e2, y]]
+           pure $ ((state' >- y') ** SndEv trans trans')
          otherwise => Nothing
 
   evalCFI ((Prim2 z w s) >- y) = do
