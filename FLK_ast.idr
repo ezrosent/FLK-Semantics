@@ -56,16 +56,16 @@ mutual
   Env = SortedMap Ident (Exp Done `Either` Exp RecLam)
 
   data Exp : Status -> Type where
-    App   : Exp a   -> Exp b          -> Exp Inter
     Abs   : Ident   -> Exp a          -> Exp Lam
     Rec   : Ident   -> Exp a          -> Exp RecLam
+    App   : Exp a   -> Exp b          -> Exp Inter
     If    : Exp a   -> Exp b -> Exp c -> Exp Inter
     Prim1 : Op1     -> Exp a          -> Exp Inter
     Prim2 : Op2 y   -> Exp a -> Exp b -> Exp Inter
+    Id    : Ident                     -> Exp Inter
     N     : Nat                       -> Exp Done
     B     : Bool                      -> Exp Done
     Clos  : Env     -> Exp Lam        -> Exp Done
-    Id    : Ident                     -> Exp Inter
     Pair  : Exp a   -> Exp b          -> Exp Done
 
 syntax "((" [exp] [e1] [e2] "))" = "("++exp++" "++(show e1)++" "++(show e2)++")";
@@ -105,6 +105,11 @@ instance Show (CF a) where
 total
 getTag : {b : Status} -> (state : Exp b) -> Status
 getTag {b=b} _ = b
+
+-- grab value from type with proof
+total
+getTagS : {b : Status} -> (state : Exp b) -> Sigma Status (\s => Sigma (Exp s) (\exp => exp = state))
+getTagS {b=b} st = (b ** (st ** Refl))
 
 -- grab value from type
 total

@@ -2,6 +2,8 @@ module FLK_sos
 
 import FLK_ast
 import Data.SortedMap
+import Debug.Trace
+
 
 -- operational semanitcs for FLK
 -- TODO: Need way to have abstractions step
@@ -105,6 +107,7 @@ takeStep {state' = s} _ = s
 default : Exp a -> CF a
 default x = x >- emptyEnv
 
+total
 opResolve : {e : Env}
          -> (op : Op2 a)
          -> (o1 : Exp Done)
@@ -120,7 +123,96 @@ opResolve GThan (N k) (N z) =  Just ((B $ relop GThan k z) ** RelOp)
 opResolve GEThan (N k) (N z) =  Just ((B $ relop GEThan k z) ** RelOp)
 opResolve x x1 x2 = Nothing
 
+-- new evaluator, more streamlined
+total
+primHelp : (z : Op2 y)
+        -> (k : Exp Done)
+        -> (s : Exp b)
+        -> (y1 : Env)
+        -> Maybe (Sigma Status (\s1 => Sigma (CF s1) (\o => Step ((Prim2 z k s) >- y1) o)))
 
+primHelp z k (N j) y1 = opResolve {e=y1} z k (N j) >>=
+  \(exp ** trans) => pure (Done ** (exp >- y1 ** trans))
+primHelp z k (B x) y1 = opResolve {e=y1} z k (B x) >>=
+  \(exp ** trans) => pure (Done ** (exp >- y1 ** trans))
+primHelp z k (Clos x y) y1 = opResolve {e=y1} z k (Clos x y) >>=
+  \(exp ** trans) => pure (Done ** (exp >- y1 ** trans))
+primHelp z k (Pair x y) y1 = opResolve {e=y1} z k (Pair x y) >>=
+  \(exp ** trans) => pure (Done ** (exp >- y1 ** trans))
+primHelp z k f y1 = Nothing
+
+redS : (start : CF Inter) -> Maybe (Sigma Status (\s => (Sigma (CF s) (\o => Step start o))))
+
+redS ((App (Clos y' (Abs ident body)) (N k)) >- y) = "inserting ("++ident++")" `trace` Just (getTag body ** (body >- insert ident (Left (N k)) y' ** AppLam))
+redS ((App (Clos y' (Abs ident body)) (B x)) >- y) = "inserting ("++ident++")" `trace`Just (getTag body ** (body >- insert ident (Left (B x)) y' ** AppLam))
+redS ((App (Clos y' (Abs ident body)) (Clos x z)) >- y) = "inserting ("++ident++")" `trace` Just (getTag body ** (body >- insert ident (Left (Clos x z)) y' ** AppLam))
+redS ((App (Clos y' (Abs ident body)) (Pair x z)) >- y) = "inserting ("++ident++")" `trace`Just (getTag body ** (body >- insert ident (Left (Pair x z)) y' ** AppLam))
+redS ((App e1 e2) >- y) = Nothing
+
+redS ((If (B False) z w) >- y) = Just (getTag w ** (w >- y ** IfF))
+redS ((If (B True) z w) >- y) = Just (getTag z ** (z >- y ** IfT))
+redS ((If c z w) >- y) = Nothing
+
+redS ((Prim1 Not (B z)) >- y) = Just $ (Done ** (B (not z) >- y ** PNot))
+redS ((Prim1 Fst (Pair z w)) >- y) = Just $ (getTag z ** (z >- y ** PFst))
+redS ((Prim1 Snd (Pair z w)) >- y) = Just $ (getTag w ** (w >- y ** PSnd))
+redS ((Prim1 x op) >- y) = Nothing
+
+redS ((Prim2 z (N k) s) >- y) = primHelp z (N k) s y
+redS ((Prim2 z (B x) s) >- y) = primHelp z (B x) s y
+redS ((Prim2 z (Clos x w) s) >- y) = primHelp z (Clos x w) s y
+redS ((Prim2 z (Pair x w) s) >- y) = primHelp z (Pair x w) s y
+redS ((Prim2 z w s) >- y) = Nothing
+
+redS ((Id x) >- y) with (idSteps x y)
+    redS ((Id x) >- y) | Nothing with (idRecSteps x y)
+      redS ((Id x) >- y) | Nothing | Nothing = Nothing
+      redS ((Id x) >- y) | Nothing | (Just (v ** pf)) =
+        Just $ (RecLam ** (v >- y ** IdRecTrans (v ** pf)))
+    redS ((Id x) >- y) | Just (v ** pf) = Just $ (Done ** (v >- y ** IdTrans (v ** pf)))
+
+redRec : (start : CF RecLam) -> Sigma Status (\s => (Sigma (CF s) (\o => Step start o)))
+redRec ((Rec x z) >- y) = (getTag z ** (z >- (insert x (Right $ Rec x z) y) ** RecTrans))
+
+redLam : (start : CF Lam) ->  Sigma (CF Done) (\o => Step start o)
+redLam ((Abs x z) >- y) = ((Clos y (Abs x z)) >- y ** ClosLam)
+
+
+redST : (start : CF Inter) -> Maybe (Sigma Status (\s => (Sigma (CF s) (\o => Step start o))))
+redST s = "trying to reduce {"++(show s)++"}" `trace` redS s
+
+mutual
+  recSearch : (a ** CF a) -> Maybe (b ** CF b)
+  recSearch (MkSigma Inter pf) = case redST pf of {
+    Nothing => recur pf;
+    Just (st ** (state ** _)) => Just (st ** state);}
+   where recur : CF Inter -> Maybe (b ** CF b)
+         recur ((App x z) >- y) = case recSearchT ((getTag x) ** (x >- y)) of
+                                       Just (st ** v >- y') => Just (Inter ** (App v z) >- y')
+                                       Nothing => case recSearchT ((getTag z) ** (z >- y)) of {
+                                         Just (st ** v >- y') => Just  (Inter ** (App x v) >- y');
+                                         Nothing =>  Nothing;
+                                       }
+         recur ((If x z w) >- y) = recSearchT ((getTag x) ** (x >-  y)) >>=
+                    (\ (st ** v >- y') => pure (Inter ** (If v z w) >- y'))
+         recur ((Prim1 x z) >- y) = recSearchT ((getTag z) ** (z >- y)) >>=
+           (\ (st ** v >- y') => pure (Inter ** (Prim1 x v) >- y'))
+
+         recur ((Prim2 z w s) >- y) = case recSearchT ((getTag w) ** (w >- y)) of
+                                           Nothing => case recSearchT ((getTag s) ** (s >- y)) of
+                                                     Nothing => Nothing
+                                                     Just (st ** v >- y') => Just (Inter ** (Prim2 z w v) >- y')
+                                           Just (st ** v >- y') => Just (Inter ** (Prim2 z v s) >- y')
+         recur ((Id x) >- y) = Nothing
+
+  recSearch (MkSigma Done pf) = Nothing
+  recSearch (MkSigma Lam pf) = let (state ** trans) = redLam pf in Just (Done ** state)
+  recSearch (MkSigma RecLam pf) = let (st ** (state  ** trans)) = redRec pf in
+                                      Just (st ** state)
+  recSearchT : (a ** CF a) -> Maybe (b ** CF b)
+  recSearchT (s ** pf) = "entering with ["++(show pf)++"]" `trace` recSearch (s ** pf)
+
+-- old evaluator, more verified
 mutual
   -- Evaluator based on operational semantics
   -- TODO: add printing, with effects and such
@@ -133,6 +225,7 @@ mutual
     goTill (MkSigma Lam pf) | Nothing = (MkSigma Lam pf)
     goTill (MkSigma Lam pf) | (Just (MkSigma x (MkSigma y z))) = goTill $ MkSigma x y
   goTill (MkSigma RecLam pf) = let (x ** (y ** z)) = recTrans pf in goTill (x ** y)
+
 
 
   -- Search rules for the semantics
@@ -281,8 +374,7 @@ mutual
                   -> Maybe (Sigma Status
                                  (\s => Sigma (CF s)
                                               (\o => Step ((App (Clos x z) k) >- y) o)))
-  search_subst_env y x (Abs iden w) k =
-    Just $ (getTag w ** (w >- (insert iden (Left k) x) ** AppLam))
+  search_subst_env y x (Abs iden w) k = "inserting ("++iden++")" `trace` Just (getTag w ** (w >- (insert iden (Left k) x) ** AppLam))
 
   search_app : (y : Env)
             -> (z : Exp a)

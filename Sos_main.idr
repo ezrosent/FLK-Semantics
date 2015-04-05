@@ -37,8 +37,17 @@ evalPrint (MkSigma RecLam pf) = let (x ** (y ** z)) = recTrans pf in do
 runEval : Sigma Status (\s => (CF s)) -> IO (Sigma Status (\s' => CF s'))
 runEval s = run $ evalPrint s
 
+runRedS : (s ** CF s) -> IO ()
+runRedS s =  case recSearchT s of
+                  Just (st ** state) => do
+                    putStrLn (show state)
+                    runRedS (st ** state)
+                  Nothing => do
+                    putStrLn "Done"
+
+
 main : IO ()
-main = do { runEval ycomb; pure ()}
+main = do { runEval ycomb; runRedS ycomb; pure ()}
   where example : (s ** CF s)
         example = (Inter ** (Prim2 Plus (Prim2 Plus (N 3) (N 4)) (B False)) >- emptyEnv)
         exp2 : Exp Inter
