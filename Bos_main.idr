@@ -14,5 +14,5 @@ evalPrint (MkSigma x pf) with (evalCF x pf)
 
 main : IO ()
 main = do
-  run $ evalPrint ycomb
+  run $ evalPrint ycomb2
   run $ evalPrint (Inter ** (Prim1 Fst (Pair (Prim2 Plus (N 2) (N 4)) (Prim1 Not (B False))) >- emptyEnv))

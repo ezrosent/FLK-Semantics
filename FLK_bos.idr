@@ -1,6 +1,5 @@
 module FLK_bos
 
-import Data.SortedMap
 import FLK_ast
 
 
@@ -12,7 +11,7 @@ mutual
       ex1 >- env1 `BigStep` ex2 >- env2
 
   -- Big Step rules for FLK
-  data BigStep : (CF a) -> (CF b) -> Type where
+  data BigStep : (CF a) -> (CF Done) -> Type where
     DoneEv : {d : Exp Done} -> [d, e =>> d, e]
 
     FstEv   : [e1 =>> (Pair eFst eSnd)]
@@ -38,6 +37,7 @@ mutual
             -> [e1 =>> v1]
             -> [e2 =>> v2]
             -> [(Prim2 o e1 e2), env =>> genOp o v1 v2, env]
+
     IfTEv : [cond =>> (B True)]
          -> [t =>> v]
          -> [If cond t f, e =>> v, e]
@@ -46,13 +46,12 @@ mutual
          -> [f =>> v]
          -> [If cond t f, e =>> v, e]
 
-    IdValEv : {ident : Ident} -> {e : Env} -> {v : Exp Done}
-           -> (v ** lookup ident e = Just $ Left v)
-           -> [v, e =>> r, e']
-           -> [Id ident, e =>> r, e']
+    IdValEv : {ident : Ident} -> {e : Env}
+           -> Sigma (Exp Done) (\st => lookup ident e = Just (Left st))
+           -> [Id ident, e =>> v, e']
 
-    IdRecEv : {ident : Ident} -> {e : Env} -> {v : Exp RecLam}
-           -> (v ** lookup ident e = Just $ Right v)
+    IdRecEv : {ident : Ident} -> {e : Env}
+           -> Sigma (Exp RecLam) (\st => lookup ident e = Just (Right st))
            -> [v, e =>> r, e']
            -> [Id ident, e =>> r, e']
 
@@ -75,7 +74,7 @@ mutual
     show (Prim2Gen w u) = (show w) ++ " and " ++ (show u) ++ " -> " ++ "Prim2GEv"
     show (IfTEv w x1) = (show w) ++ " and " ++ (show x1) ++ " -> " ++ "IfTEv"
     show (IfFEv w x1) = (show w) ++ " and " ++ (show x1) ++ " -> " ++ "IfFEv"
-    show (IdValEv x y) = (show y) ++ " -> IdValEv"
+    show (IdValEv y) = "IdValEv"
     show (IdRecEv x y) = (show y) ++ " -> IdRecEv"
     show LamEv = "LamEv"
     show (RecEv x) = (show x) ++ "-> RecEv"
@@ -154,7 +153,7 @@ mutual
   evalCFI ((Id x) >- y) with (idSteps x y)
     evalCFI ((Id x) >- y) | (Just (MkSigma z pf)) = do {
         ((st >- y') ** trans) <- [[z, y]];
-        pure $ ((st >- y') ** (IdValEv (MkSigma z pf) trans))
+        pure $ ((st >- y') ** (IdValEv (MkSigma z pf)))
       }
     evalCFI ((Id x) >- y) | Nothing with (idRecSteps x y)
       evalCFI ((Id x) >- y) | Nothing | Nothing = Nothing
@@ -162,7 +161,6 @@ mutual
         ((st >- y') ** trans) <- [[z, y]];
         pure $ ((st >- y') ** (IdRecEv (MkSigma z pf) trans))
       }
-
 
   evalCFD : (st : CF Done) -> (Sigma (CF Done) (\st' => st `BigStep` st'))
   evalCFD (x >- z) = (x >- z ** DoneEv)

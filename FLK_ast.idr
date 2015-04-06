@@ -1,9 +1,10 @@
 module FLK_ast
 
-import Data.SortedMap
-
 Ident : Type
 Ident = String
+
+insert : a -> b -> List (a,b) -> List (a,b)
+insert a b = ((a, b)::)
 
 data OpTy = Arith | Rel | Gen | Bool
 
@@ -53,7 +54,7 @@ relop GEThan = (>=)
 
 mutual
   Env : Type
-  Env = SortedMap Ident (Exp Done `Either` Exp RecLam)
+  Env = List (Ident, (Exp Done `Either` Exp RecLam))
 
   data Exp : Status -> Type where
     Abs   : Ident   -> Exp a          -> Exp Lam
@@ -79,7 +80,7 @@ instance Show (Exp a) where
   show (Prim2 x z w) = (((show x) z w))
   show (N k) = (show k)
   show (B x) = (show x)
-  show (Clos x y) = (("Clos" (map fst $ SortedMap.toList x) y))
+  show (Clos x y) = (("Clos" (map fst $ x) y))
   show (Id x) = (show x)
   show (Pair x y) = (("Pair" x y))
 
@@ -93,13 +94,13 @@ genOp EQ a b = B False
 genOp NEQ a b = B True
 
 emptyEnv : Env
-emptyEnv = empty
+emptyEnv = []
 infixr 7 >-
 data CF : Status -> Type where
   (>-) : {s : Status} -> (Exp s) -> Env -> (CF s)
 
 instance Show (CF a) where
-  show (x >- z) = "<" ++ show x ++ ", "++ (show $ map fst $ SortedMap.toList z)++ ">"
+  show (x >- z) = "<" ++ show x ++ ", "++ (show $ map fst $ z)++ ">"
 
 -- grab value from type
 total
@@ -142,5 +143,12 @@ where h1 : (x : Either (Exp Done) (Exp RecLam))
 yexpr : (Exp Inter)
 yexpr = (App (App (Abs "f" (App (Abs "x" (App (Id "x") (Id "x"))) (Abs "g" (App (Id "f") (Abs "x" (App (App (Id "g") (Id "g")) (Id "x"))))))) (Abs "f" (Abs "n" (If (Prim2 EQ (Id "n") (N 0)) (N 0) (Prim2 Plus (Id "n") (App (Id "f") (Prim2 Minus (Id "n") (N 1)))))))) (N 4))
 
+yexpr2 : (Exp Inter)
+yexpr2 = (App (App (Abs "f" (App (Abs "x" (App (Id "x") (Id "x"))) (Abs "g" (App (Id "f") (Abs "x2" (App (App (Id "g") (Id "g")) (Id "x2"))))))) (Abs "f2" (Abs "n" (If (Prim2 EQ (Id "n") (N 0)) (N 0) (Prim2 Plus  (App (Id "f2") (Prim2 Minus (Id "n") (N 1))) (Id "n")))))) (N 4))
+
+ycomb2 : (s ** CF s)
+ycomb2 = (Inter ** yexpr2 >- emptyEnv)
+
 ycomb : (s ** CF s)
 ycomb = (Inter ** yexpr >- emptyEnv)
+

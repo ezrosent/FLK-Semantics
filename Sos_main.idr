@@ -1,6 +1,5 @@
 module Main
 
-import Data.SortedMap
 import FLK_sos
 import FLK_ast
 import Effects
@@ -47,10 +46,16 @@ runRedS s =  case recSearchT s of
 
 
 main : IO ()
-main = do { runEval ycomb; runRedS ycomb; pure ()}
+main = do { runEval subexp; runRedS subexp; pure ()}
   where example : (s ** CF s)
         example = (Inter ** (Prim2 Plus (Prim2 Plus (N 3) (N 4)) (B False)) >- emptyEnv)
         exp2 : Exp Inter
         exp2 = (App (Abs "x" (Prim2 Plus (N 4) (Id "x"))) (N 4))
+        sublam : Exp Inter
+        sublam = (App (Abs "x" (App (Id "x") (N 3))) (Abs "x" (Prim2 Plus (Id "x") (N 3))))
+        subexp : (s ** CF s)
+        subexp = (Inter ** sublam >- emptyEnv)
+        omega : (s ** CF s)
+        omega = (Inter ** (App (Abs "x" (App (Id "x") (Id "x"))) (Abs "x" (App (Id "x") (Id "x")))) >- emptyEnv)
         example2 : (s ** CF s)
         example2 = (Inter ** (exp2 >- emptyEnv))

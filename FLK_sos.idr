@@ -1,10 +1,11 @@
 module FLK_sos
 
 import FLK_ast
-import Data.SortedMap
 import Debug.Trace
 
 
+niceAppend : Env -> Env -> Env
+niceAppend a b = [ x | x <- a, (not $ [fst x] `hasAny` (map fst b))] ++ b
 -- operational semanitcs for FLK
 -- TODO: Need way to have abstractions step
 mutual
@@ -179,7 +180,7 @@ redLam ((Abs x z) >- y) = ((Clos y (Abs x z)) >- y ** ClosLam)
 
 
 redST : (start : CF Inter) -> Maybe (Sigma Status (\s => (Sigma (CF s) (\o => Step start o))))
-redST s = "trying to reduce {"++(show s)++"}" `trace` redS s
+redST s = redS s
 
 mutual
   recSearch : (a ** CF a) -> Maybe (b ** CF b)
@@ -188,21 +189,21 @@ mutual
     Just (st ** (state ** _)) => Just (st ** state);}
    where recur : CF Inter -> Maybe (b ** CF b)
          recur ((App x z) >- y) = case recSearchT ((getTag x) ** (x >- y)) of
-                                       Just (st ** v >- y') => Just (Inter ** (App v z) >- y')
+                                       Just (st ** v >- y') => Just (Inter ** (App v z) >- (y' `niceAppend` y))
                                        Nothing => case recSearchT ((getTag z) ** (z >- y)) of {
-                                         Just (st ** v >- y') => Just  (Inter ** (App x v) >- y');
+                                         Just (st ** v >- y') => Just  (Inter ** (App x v) >- (y' `niceAppend` y));
                                          Nothing =>  Nothing;
                                        }
          recur ((If x z w) >- y) = recSearchT ((getTag x) ** (x >-  y)) >>=
-                    (\ (st ** v >- y') => pure (Inter ** (If v z w) >- y'))
+                    (\ (st ** v >- y') => pure (Inter ** (If v z w) >- (y')))
          recur ((Prim1 x z) >- y) = recSearchT ((getTag z) ** (z >- y)) >>=
-           (\ (st ** v >- y') => pure (Inter ** (Prim1 x v) >- y'))
+           (\ (st ** v >- y') => pure (Inter ** (Prim1 x v) >- y))
 
          recur ((Prim2 z w s) >- y) = case recSearchT ((getTag w) ** (w >- y)) of
                                            Nothing => case recSearchT ((getTag s) ** (s >- y)) of
-                                                     Nothing => Nothing
-                                                     Just (st ** v >- y') => Just (Inter ** (Prim2 z w v) >- y')
-                                           Just (st ** v >- y') => Just (Inter ** (Prim2 z v s) >- y')
+                                                           Nothing => Nothing
+                                                           Just (st ** v >- y') => Just (Inter ** (Prim2 z w v) >- (y' `niceAppend` y))
+                                           Just (st ** v >- y') => Just (Inter ** (Prim2 z v s) >- (y') )
          recur ((Id x) >- y) = Nothing
 
   recSearch (MkSigma Done pf) = Nothing
@@ -210,7 +211,7 @@ mutual
   recSearch (MkSigma RecLam pf) = let (st ** (state  ** trans)) = redRec pf in
                                       Just (st ** state)
   recSearchT : (a ** CF a) -> Maybe (b ** CF b)
-  recSearchT (s ** pf) = "entering with ["++(show pf)++"]" `trace` recSearch (s ** pf)
+  recSearchT (s ** pf) = recSearch (s ** pf)
 
 -- old evaluator, more verified
 mutual
@@ -271,7 +272,7 @@ mutual
   search_prim2_rhs_7 : (z : Op2 y)
                     -> (exp : Exp Done)
                     -> (s : Exp b)
-                    -> (y : SortedMap String (Either (Exp Done) (Exp RecLam)))
+                    -> (y : Env)
                     -> Maybe (Sigma Status (\s2 => Sigma (CF s2)
                                    (\o => Step ((Prim2 z exp s) >- y) o)))
   search_prim2_rhs_7 z exp (App x w) y = [[y; (App x w); Prim2 z exp; Prim2R]]
@@ -297,7 +298,7 @@ mutual
   search_prim2 : (z : Op2 y)
               -> (w : Exp a)
               -> (s : Exp b)
-              -> (y : SortedMap String (Either (Exp Done) (Exp RecLam)))
+              -> (y : Env)
               -> Maybe (Sigma Status (\s1 => Sigma (CF s1)
                                              (\o => Step ((Prim2 z w s) >- y) o)))
   search_prim2 z (App x w) s y = [[y; (App x w); \st => Prim2 z st s; Prim2L]]
@@ -374,7 +375,7 @@ mutual
                   -> Maybe (Sigma Status
                                  (\s => Sigma (CF s)
                                               (\o => Step ((App (Clos x z) k) >- y) o)))
-  search_subst_env y x (Abs iden w) k = "inserting ("++iden++")" `trace` Just (getTag w ** (w >- (insert iden (Left k) x) ** AppLam))
+  search_subst_env y x (Abs iden w) k = Just (getTag w ** (w >- (insert iden (Left k) x) ** AppLam))
 
   search_app : (y : Env)
             -> (z : Exp a)
